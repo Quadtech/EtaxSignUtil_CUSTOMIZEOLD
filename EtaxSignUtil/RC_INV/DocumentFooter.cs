@@ -5,7 +5,7 @@ using System.Text;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel;
 
-namespace EtaxSignUtil.RC
+namespace EtaxSignUtil.RC_INV
 {
     public class DocumentFooter : EtaxSignUtil.Layout.DocumentFooter
     {

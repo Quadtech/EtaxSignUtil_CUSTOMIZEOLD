@@ -116,11 +116,11 @@
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
       <DependentUpon>Settings.settings</DependentUpon>
     </Compile>
-    <Compile Include="RC\DocumentFooter.cs" />
-    <Compile Include="RC\DocumentHeader.cs" />
-    <Compile Include="RC\PRLayout.cs" />
-    <Compile Include="RC\RCLayout.cs" />
-    <Compile Include="RC\TradeLineItemInformation.cs" />
+    <Compile Include="RC_INV\DocumentFooter.cs" />
+    <Compile Include="RC_INV\DocumentHeader.cs" />
+    <Compile Include="RC_INV\PRLayout.cs" />
+    <Compile Include="RC_INV\RCLayout.cs" />
+    <Compile Include="RC_INV\TradeLineItemInformation.cs" />
     <Compile Include="ResourceLoader.cs" />
     <Compile Include="SettingForm.cs">
       <SubType>Form</SubType>

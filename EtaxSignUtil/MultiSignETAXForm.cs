@@ -40,6 +40,7 @@ namespace EtaxSignUtil
         private DataTable TBSIHeader { get; set; }
         private DataTable TBCNDNSalesHeader { get; set; }
         private DataTable TBCBPRHeader { get; set; }
+        private DataTable TBRCHeader { get; set; }
         private bool UseEtax { get; set; } = true;
         private EtaxMail EtaxMail { get; set; }
         private TokenInfo Token { get; set; }
@@ -95,6 +96,8 @@ namespace EtaxSignUtil
             this.DBSimpleObj.CreateDataTable(this.TBCNDNSalesHeader, "SELECT * FROM CreditDebitNoteSalesInvoiceHeader");
             this.TBCBPRHeader = new DataTable("CashBankPRHeader");
             this.DBSimpleObj.CreateDataTable(this.TBCBPRHeader, "SELECT * FROM CashBankPRHeader");
+            this.TBRCHeader = new DataTable("ReceiptHeader");
+            this.DBSimpleObj.CreateDataTable(this.TBRCHeader, "SELECT * FROM ReceiptHeader");
 
             DataTable TBConfig = new DataTable();
             string Query = $@"SELECT C.Value
@@ -265,7 +268,31 @@ AND H.DocumentTypeCode = '{this.DocumentTypeCode.Replace("Header_", "")}'
 {QuerySearch}
 {FilterCustomerType}";
             }
+            else if (ModuleCode == "RC")
+            {
+                string QuerySearch = "";
+                if (this.LookUpEdit_Search.EditValue.ToString() == "Date")
+                    QuerySearch = this.GetConditionDate("H.ReceiptDate", this.DateEdit_From, this.DateEdit_To);
+                else
+                    QuerySearch = this.GetCondition("H.ReceiptNo", this.TextEdit_From, this.TextEdit_To);
 
+                Query = $@"SELECT CAST(0 as bit) 'Select'
+, 'RC' AS DocumentModuleCode
+, H.ReceiptType AS DocumentTypeCode
+, H.RunNo
+, H.ReceiptDate AS TransactionDate
+, H.ReceiptNo AS DocNo
+, H.ReceivableCode AS CustomerCode
+, LTRIM(RTRIM(ISNULL(H.ReceivablePrefix,'') +' '+ ISNULL(H.ReceivableName,'') + ' '+ISNULL(H.ReceivableSuffix,''))) AS CustomerFullName
+, CAST(1 as bit) AS IsSendMail
+FROM ReceiptHeader H
+LEFT JOIN CustomerMaster CM
+ON CM.Code = H.ReceivableCode
+WHERE H.RecStatus = 0
+AND H.ReceiptType = '{this.DocumentTypeCode}'
+{QuerySearch}
+{FilterCustomerType}";
+            }
             else
             {
                 throw new NotImplementedException();
@@ -321,6 +348,7 @@ AND H.DocumentTypeCode = '{this.DocumentTypeCode.Replace("Header_", "")}'
             long RunNo = ReceiveValue.LongReceive("RunNo", rowEtax, -1);
             string DocNo = ReceiveValue.StringReceive("DocNo", rowEtax);
             bool IsSendMail = ReceiveValue.BoolReceive("IsSendMail", rowEtax, true);
+            string FieldDocTypeCode = "DocumentTypeCode";
             DataTable TBSelect = null;
             if (ModuleCode.StartsWith("SI"))
                 TBSelect = this.TBSIHeader.Clone();
@@ -328,11 +356,17 @@ AND H.DocumentTypeCode = '{this.DocumentTypeCode.Replace("Header_", "")}'
                 TBSelect = this.TBCNDNSalesHeader.Clone();
             else if (ModuleCode == "CBPR")
                 TBSelect = this.TBCBPRHeader.Clone();
+            else if (ModuleCode == "RC")
+            {
+                TBSelect = this.TBRCHeader.Clone();
+                FieldDocTypeCode = "ReceiptType";
+            }
+                
             else
             {
                 throw new NotImplementedException();
             }
-            string Query = $"SELECT * FROM {TBSelect.TableName} WHERE RecStatus = 0 AND DocumentTypeCode = '{DocumentTypeCode}' AND RunNo = {RunNo}";
+            string Query = $"SELECT * FROM {TBSelect.TableName} WHERE RecStatus = 0 AND {FieldDocTypeCode} = '{DocumentTypeCode}' AND RunNo = {RunNo}";
             this.DBSimpleObj.FillData(TBSelect, Query);
             if (TBSelect.Rows.Count == 0)
             {
@@ -636,13 +670,23 @@ Description : {ex.InnerException.Message}";
             }
             else if (ModuleCode == "CBPR")
             {
-                RC.PRLayout PRLayoutObj = new RC.PRLayout(this.DBSimpleObj, this.QEBCenterInfo);
+                RC_INV.PRLayout PRLayoutObj = new RC_INV.PRLayout(this.DBSimpleObj, this.QEBCenterInfo);
                 TransErr += PRLayoutObj.InitLayout(rowHeader, ref ErrMsg);
                 if (TransErr == 0)
                     TransErr = PRLayoutObj.ValidateLayout(ref ErrMsg);
                 if (TransErr == 0)
                     XMLLayout = PRLayoutObj.GetXMLLayout();
                 DocumentType = "Tax Invoice";
+            }
+            else if (ModuleCode == "RC")
+            {
+                RC_INV.RCLayout RCLayoutObj = new RC_INV.RCLayout(this.DBSimpleObj, this.QEBCenterInfo);
+                TransErr += RCLayoutObj.InitLayout(rowHeader, ref ErrMsg);
+                if (TransErr == 0)
+                    TransErr = RCLayoutObj.ValidateLayout(ref ErrMsg);
+                if (TransErr == 0)
+                    XMLLayout = RCLayoutObj.GetXMLLayout();
+                DocumentType = "Receipt";
             }
             return TransErr;
         }
@@ -795,16 +839,24 @@ NEWID(),
             long RunNo = ReceiveValue.LongReceive("RunNo", rowFocus, -1);
             string DocNo = ReceiveValue.StringReceive("DocNo", rowFocus);
 
+            string FieldDocTypeCode = "DocumentTypeCode";
             DataTable TBSelect = null;
             if (ModuleCode.StartsWith("SI"))
                 TBSelect = this.TBSIHeader.Clone();
             else if (ModuleCode == "CNDNSALES")
                 TBSelect = this.TBCNDNSalesHeader.Clone();
+            else if (ModuleCode == "CBPR")
+                TBSelect = this.TBCBPRHeader.Clone();
+            else if (ModuleCode == "RC")
+            {
+                TBSelect = this.TBRCHeader.Clone();
+                FieldDocTypeCode = "ReceiptType";
+            }
             else
             {
                 throw new NotImplementedException();
             }
-            string Query = $"SELECT * FROM {TBSelect.TableName} WHERE RecStatus = 0 AND DocumentTypeCode = '{DocumentTypeCode}' AND RunNo = {RunNo}";
+            string Query = $"SELECT * FROM {TBSelect.TableName} WHERE RecStatus = 0 AND {FieldDocTypeCode} = '{DocumentTypeCode}' AND RunNo = {RunNo}";
             this.DBSimpleObj.FillData(TBSelect, Query);
             if (TBSelect.Rows.Count == 0)
             {
@@ -940,6 +992,8 @@ NEWID(),
                 TBSelect = this.TBCNDNSalesHeader.Clone();
             else if (ModuleCode == "CBPR")
                 TBSelect = this.TBCBPRHeader.Clone();
+            else if (ModuleCode == "RC")
+                TBSelect = this.TBRCHeader.Clone();
             else
             {
                 throw new NotImplementedException();

@@ -7,15 +7,15 @@ using DBUtil;
 using System.Data;
 using ModuleUtil;
 
-namespace EtaxSignUtil.RC
+namespace EtaxSignUtil.RC_INV
 {
     public class PRLayout : BaseLayout
     {
         public FileControl FileControl { get; private set; }
-        public RC.DocumentHeader DocumentHeader { get; private set; }
+        public RC_INV.DocumentHeader DocumentHeader { get; private set; }
         public BuyerInformation BuyerInformation { get; private set; }
-        public List<RC.TradeLineItemInformation> ListTradeLineItemInformation { get; private set; }
-        public RC.DocumentFooter DocumentFooter { get; private set; }
+        public List<RC_INV.TradeLineItemInformation> ListTradeLineItemInformation { get; private set; }
+        public RC_INV.DocumentFooter DocumentFooter { get; private set; }
         public FileTrailer FileTrailer { get; private set; }
         public PRLayout(DBSimple dbSimple, QEB.Center QEBCenterInfo)
             : base(dbSimple, QEBCenterInfo)
@@ -140,7 +140,7 @@ AND H.RunNo = '{RunNo}'";
 
             this.FileControl = new FileControl(this.SellerInformation.SELLER_TAX_ID, this.SellerInformation.SELLER_BRANCH_ID);
 
-            this.DocumentHeader = new RC.DocumentHeader(ReceiptNo
+            this.DocumentHeader = new RC_INV.DocumentHeader(ReceiptNo
              , ReceiptDate
              , ""
              , FieldNote);
@@ -178,7 +178,7 @@ AND H.RunNo = '{RunNo}'";
                 index++;
                 string TransactionDescription = ReceiveValue.StringReceive("TransactionDescription", rowSIDetailsUpdate);
                 double TotalAmountAfterDiscount = ReceiveValue.DoubleReceive("TotalAmountAfterDiscount", rowSIDetailsUpdate, 0);
-                RC.TradeLineItemInformation TradeLineItemInformation = new RC.TradeLineItemInformation(index
+                RC_INV.TradeLineItemInformation TradeLineItemInformation = new RC_INV.TradeLineItemInformation(index
                     , TransactionDescription
                     , 1
                     , "DOC"
@@ -186,7 +186,7 @@ AND H.RunNo = '{RunNo}'";
                     , TotalAmountAfterDiscount);
                 this.ListTradeLineItemInformation.Add(TradeLineItemInformation);
             }
-            this.DocumentFooter = new RC.DocumentFooter(index, CurrencyCode, TotalAmountCurrencyAfterVAT);
+            this.DocumentFooter = new RC_INV.DocumentFooter(index, CurrencyCode, TotalAmountCurrencyAfterVAT);
 
             this.FileTrailer = new FileTrailer(1);
             return TransErr;

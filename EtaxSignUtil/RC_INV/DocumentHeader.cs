@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace EtaxSignUtil.RC
+namespace EtaxSignUtil.RC_INV
 {
     public class DocumentHeader : EtaxSignUtil.Layout.DocumentHeader
     {

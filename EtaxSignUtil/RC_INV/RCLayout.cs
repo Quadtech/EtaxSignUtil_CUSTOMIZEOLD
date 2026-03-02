@@ -7,15 +7,15 @@ using DBUtil;
 using System.Data;
 using ModuleUtil;
 
-namespace EtaxSignUtil.RC
+namespace EtaxSignUtil.RC_INV
 {
     public class RCLayout : BaseLayout
     {
         public FileControl FileControl { get; private set; }
-        public RC.DocumentHeader DocumentHeader { get; private set; }
+        public RC_INV.DocumentHeader DocumentHeader { get; private set; }
         public BuyerInformation BuyerInformation { get; private set; }
-        public List<RC.TradeLineItemInformation> ListTradeLineItemInformation { get; private set; }
-        public RC.DocumentFooter DocumentFooter { get; private set; }
+        public List<RC_INV.TradeLineItemInformation> ListTradeLineItemInformation { get; private set; }
+        public RC_INV.DocumentFooter DocumentFooter { get; private set; }
         public FileTrailer FileTrailer { get; private set; }
         public RCLayout(DBSimple dbSimple, QEB.Center QEBCenterInfo)
             : base(dbSimple, QEBCenterInfo)
@@ -29,15 +29,15 @@ namespace EtaxSignUtil.RC
             bool val = this.GetSellerInfomation(ref ErrMsg);
             if (!val)
                 return ++TransErr;
-            string DocumentTypeCode = ReceiveValue.StringReceive("DocumentTypeCode", rowHeader);
+            string ReceiptType = ReceiveValue.StringReceive("ReceiptType", rowHeader);
             long RunNo = ReceiveValue.LongReceive("RunNo", rowHeader, 0);
             string QueryHeader =
 @"SELECT H.ReceiptNo
 ,H.ReceiptDate
 ,SI.InvoiceNo
-,SI.PORefNo
+,'' AS PORefNo
 ,H.FieldNote
-,SI.DispatchDate
+,SI.InvoiceDate AS DispatchDate
 ,SI.CustomerCode
 ,LTRIM(RTRIM( ISNULL(CM.PrefixThai,'')+' '+ ISNULL(CM.NameThai,'')+' '+ISNULL(CM.SuffixThai,''))) AS CustomerName
 ,CM.TaxID AS TaxID
@@ -62,10 +62,10 @@ namespace EtaxSignUtil.RC
 ,CM.PostalCode AS PostalCode
 ,ISNULL(CM.DomesticExport,'D') AS DomesticExport
 ,SI.CurrencyCode
-,SI.TotalAmountIncludeVATTrueFalse
+,CAST(0 as bit) AS TotalAmountIncludeVATTrueFalse
 ,SI.TotalAmountCurrency
-,SI.AmountDiscountCurrency
-,SI.TotalAmountCurrencyAfterDiscountBeforeVAT
+,CAST(0 as float) AS AmountDiscountCurrency
+,SI.TotalAmountCurrency AS TotalAmountCurrencyAfterDiscountBeforeVAT
 ,SI.VATRate 
 ,SI.VATAmountCurrency
 ,SI.TotalAmountCurrencyAfterVAT
@@ -74,14 +74,15 @@ CROSS APPLY
 (
 	SELECT TOP 1 * FROM ReceiptDetails D
 	WHERE D.RecStatus = 0
-	AND D.DocumentTypeCode = H.DocumentTypeCode
+	AND D.ReceiptType = H.ReceiptType
 	AND D.RunNo = H.RunNo
+	AND RefDocType1 ='INV'
 ) D
-LEFT JOIN SalesInvoiceHeader SI
+LEFT JOIN InvoiceHeader SI
 ON SI.RecStatus = 0
 AND SI.InvoiceNo = D.RefDocNo
 LEFT JOIN CustomerMaster CM
-ON CM.Code = SI.CustomerCode
+ON CM.Code = H.ReceivableCode
 AND CM.RecStatus = 0
 LEFT JOIN QERP.dbo.ProvinceState P
 ON P.CountryCode = CM.Country
@@ -95,9 +96,9 @@ ON T.CountryCode = CM.Country
 AND T.ProvinceStateCode = CM.ProvinceState
 AND T.KhetAmporCity = CM.KhetAmporCity
 AND T.Code = CM.KwaengTambon
-WHERE H.DocumentTypeCode = '{0}'
+WHERE H.ReceiptType = '{0}'
 AND H.RunNo = {1}";
-            QueryHeader = String.Format(QueryHeader, DocumentTypeCode, RunNo);
+            QueryHeader = String.Format(QueryHeader, ReceiptType, RunNo);
             DataTable TBHeader = new DataTable();
             TransErr = dbSimple.FillData(TBHeader, QueryHeader, ref ErrCode, ref ErrMsg);
             if (TransErr != 0 || TBHeader.Rows.Count == 0)
@@ -110,27 +111,28 @@ AND H.RunNo = {1}";
 @"SELECT SI.TransactionCode
 , SI.TransactionDescription
 , SI.Quantity
-, SI.SalesUnitCode
+, '' AS SalesUnitCode
 , SI.UnitPriceCurrency
 , SI.TotalAmountCurrency
 , SI.TotalAmountAfterDiscount
-, SI.Note
+,'' AS Note
 FROM ReceiptHeader H
 CROSS APPLY 
 (
 	SELECT TOP 1 * FROM ReceiptDetails D
 	WHERE D.RecStatus = 0
-	AND D.DocumentTypeCode = H.DocumentTypeCode
+	AND D.ReceiptType = H.ReceiptType
 	AND D.RunNo = H.RunNo
+    AND RefDocType1 ='INV'
 ) D
-LEFT JOIN SalesInvoiceDetails SI
+LEFT JOIN InvoiceDetails SI
 ON SI.RecStatus = 0
 AND SI.InvoiceNo = D.RefDocNo
-WHERE H.DocumentTypeCode = '{0}'
+WHERE H.ReceiptType = '{0}'
 AND H.RunNo = '{1}'
 AND SI.TransactionType IN ('I','B')
-ORDER BY VLine";
-            QueryDetails = String.Format(QueryDetails, DocumentTypeCode, RunNo);
+ORDER BY D.VLine";
+            QueryDetails = String.Format(QueryDetails, ReceiptType, RunNo);
             DataTable TBDetails = new DataTable();
             TransErr = dbSimple.FillData(TBDetails, QueryDetails, ref ErrCode, ref ErrMsg);
             if (TransErr != 0 || TBDetails.Rows.Count == 0)
@@ -181,7 +183,7 @@ ORDER BY VLine";
 
             this.FileControl = new FileControl(this.SellerInformation.SELLER_TAX_ID, this.SellerInformation.SELLER_BRANCH_ID);
 
-            this.DocumentHeader = new RC.DocumentHeader(ReceiptNo
+            this.DocumentHeader = new RC_INV.DocumentHeader(ReceiptNo
              , ReceiptDate
              , PORefNo
              , FieldNote);
@@ -227,7 +229,7 @@ ORDER BY VLine";
                 double TotalAmountCurrencyDetails = ReceiveValue.DoubleReceive("TotalAmountCurrency", rowSIDetailsUpdate, 0);
                 double TotalAmountAfterDiscount = ReceiveValue.DoubleReceive("TotalAmountAfterDiscount", rowSIDetailsUpdate, 0);
                 string Note = ReceiveValue.StringReceive("Note", rowSIDetailsUpdate);
-                RC.TradeLineItemInformation TradeLineItemInformation = new RC.TradeLineItemInformation(index
+                RC_INV.TradeLineItemInformation TradeLineItemInformation = new RC_INV.TradeLineItemInformation(index
                     , TransactionCode
                     , TransactionDescription
                     , Quantity
@@ -247,7 +249,7 @@ ORDER BY VLine";
 
                 this.ListTradeLineItemInformation.Add(TradeLineItemInformation);
             }
-            this.DocumentFooter = new RC.DocumentFooter(index
+            this.DocumentFooter = new RC_INV.DocumentFooter(index
                 , DispatchDate
                 , CurrencyCode
                 , TotalAmountIncludeVATTrueFalse

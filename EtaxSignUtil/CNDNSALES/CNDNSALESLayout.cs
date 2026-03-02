@@ -262,7 +262,7 @@ ORDER BY S.VLine";
                 double TotalAmountCurrencyDetails = ReceiveValue.DoubleReceive("TotalAmountCurrency", rowDetailsUpdate, 0);
                 double TotalAmountAfterDiscount = TotalAmountCurrencyDetails;
                 bool IsLast = (rowLast == rowDetailsUpdate || listItem.Length == 1) ? true : false;
-                RC.TradeLineItemInformation TradeLineItemInformation = new RC.TradeLineItemInformation(index
+                RC_INV.TradeLineItemInformation TradeLineItemInformation = new RC_INV.TradeLineItemInformation(index
                     , ItemCodeCNDN
                     , ItemDescriptionCNDN
                     , Quantity

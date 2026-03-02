@@ -531,6 +531,8 @@ Description : {ex.InnerException.Message}";
         {
             int TransErr = 0;
             string ModuleCode = ReceiveValue.StringReceive("DocumentModuleCode", rowHeader);
+            if (ModuleCode == "" && rowHeader.Table.TableName == "ReceiptHeader")
+                ModuleCode = "RC";
             if (ModuleCode == "SITI")
             {
                 SILayout SILayoutObj = new SILayout(this.DBSimpleObj, this.QEBCenterInfo);
@@ -557,7 +559,7 @@ Description : {ex.InnerException.Message}";
             }
             else if (ModuleCode == "CBPR")
             {
-                RC.PRLayout PRLayoutObj = new RC.PRLayout(this.DBSimpleObj, this.QEBCenterInfo);
+                RC_INV.PRLayout PRLayoutObj = new RC_INV.PRLayout(this.DBSimpleObj, this.QEBCenterInfo);
                 TransErr += PRLayoutObj.InitLayout(rowHeader, ref ErrMsg);
                 if (TransErr == 0)
                     TransErr = PRLayoutObj.ValidateLayout(ref ErrMsg);
@@ -565,6 +567,16 @@ Description : {ex.InnerException.Message}";
                     XMLLayout = PRLayoutObj.GetXMLLayout();
 
                 DocumentType = "Tax Invoice";
+            }
+            else if (ModuleCode == "RC")
+            {
+                RC_INV.RCLayout RCLayoutObj = new RC_INV.RCLayout(this.DBSimpleObj, this.QEBCenterInfo);
+                TransErr += RCLayoutObj.InitLayout(rowHeader, ref ErrMsg);
+                if (TransErr == 0)
+                    TransErr = RCLayoutObj.ValidateLayout(ref ErrMsg);
+                if (TransErr == 0)
+                    XMLLayout = RCLayoutObj.GetXMLLayout();
+                DocumentType = "Receipt";
             }
             return TransErr;
         }
@@ -714,7 +726,7 @@ NEWID(),
                         , ref ex);
 
             //if (TransErr == 0)
-            //    TransErr += this.UploadFile(this.rowHeader, DateSign, filepathPDF, filepathXML, ref ErrMsg);
+            //    TransErr += this.UploadFile(this.rowHeader, DateSign, filepathPDF, filepathXML, ref ErrMsg, ref ex);
             if (TransErr == 0)
             {
                 MySuccessMessageBox.Show("Test Sign ETAX เสร็จเรียบร้อย");
