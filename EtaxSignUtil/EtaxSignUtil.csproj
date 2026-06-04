@@ -22,7 +22,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>..\..\..\..\personel\Q-ERP %284%29\Q-ERP\</OutputPath>
+    <OutputPath>..\..\..\deploy\bin_Lertvilai\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -134,6 +134,8 @@
     <Compile Include="MultiSignETAXForm.designer.cs">
       <DependentUpon>MultiSignETAXForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="NativeCrypto.cs" />
+    <Compile Include="NativeX509Signature.cs" />
     <Compile Include="SignPDF.cs" />
     <Compile Include="SignETAXForm.cs">
       <SubType>Form</SubType>

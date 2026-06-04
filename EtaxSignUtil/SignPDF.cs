@@ -28,11 +28,36 @@ namespace EtaxSignUtil
         private DataTable TBAPIServiceInfo { get; set; }
         private string ServiceName => "Etax";
         private bool UseAPI { get; set; } = false;
+        // เปิด config UseEtaxNativeSign = Y ที่ CompanyConfig จะใช้ native crypto path (เซ็นผ่าน Windows DLL ตรง)
+        // default = false → ใช้ flow เดิม (cert.PrivateKey + X509Certificate2Signature) เพื่อไม่กระทบบริษัทที่ยังใช้ได้
+        private bool UseNativeSign { get; set; } = false;
         public SignPDF(DBUtil.DBSimple dBSimple, QEB.Center center)
         {
             this.DBSimple = dBSimple;
             this.CenterInfo = center;
             this.InitTable();
+            this.LoadEtaxConfig();
+        }
+
+        // โหลด config flag UseEtaxNativeSign ของบริษัทปัจจุบัน (ใช้ DB_NAME() ตาม pattern config อื่นใน project นี้)
+        private void LoadEtaxConfig()
+        {
+            try
+            {
+                DataTable TBConfig = new DataTable();
+                string Query = $@"SELECT C.Value
+FROM QERP.dbo.CompanyConfig C
+WHERE C.CompanyCode = DB_NAME()
+AND C.ConfigCode = 'UseEtaxNativeSign'
+AND C.Value = 'Y'";
+                this.DBSimple.FillData(TBConfig, Query);
+                this.UseNativeSign = (TBConfig.Rows.Count > 0);
+            }
+            catch
+            {
+                // อ่าน config ไม่ได้ก็ใช้ default (false = path เดิม) ปลอดภัยสุด
+                this.UseNativeSign = false;
+            }
         }
         private void InitTable()
         {
@@ -97,6 +122,8 @@ namespace EtaxSignUtil
                 X509Certificate2 cert = null;
                 if (IsTestSign)
                     TransErr += this.GetCertTest(ref cert, ref ErrMsg);
+                else if (this.UseNativeSign)
+                    TransErr += this.GetCertNative(token, ref cert, ref ErrMsg);
                 else
                     TransErr += this.GetCert(token, ref cert, ref ErrMsg);
                 if (TransErr == 0)
@@ -169,10 +196,25 @@ namespace EtaxSignUtil
 
                     Org.BouncyCastle.X509.X509CertificateParser cp = new Org.BouncyCastle.X509.X509CertificateParser();
                     Org.BouncyCastle.X509.X509Certificate[] chain = new Org.BouncyCastle.X509.X509Certificate[] { cp.ReadCertificate(cert.RawData) };
-                    IExternalSignature externalSignature = new X509Certificate2Signature(cert, "SHA-1");
-                    MakeSignature.SignDetached(appearance, externalSignature, chain, null, null, null, 0, CryptoStandard.CMS);
-                    
-                    
+                    // เลือก signer ตาม config UseEtaxNativeSign
+                    // - Native path: ข้าม cert.PrivateKey ที่ถูก .NET cumulative update reject — เปิดเฉพาะบริษัทที่ติดปัญหา
+                    // - Default path: ใช้ X509Certificate2Signature ของ iTextSharp เหมือนเดิม — บริษัทที่ยังใช้ได้คงพฤติกรรมเดิม
+                    // ทั้งสอง path ใช้ MakeSignature.SignDetached + algorithm SHA-1+RSA เหมือนกัน → output PKCS#7/CMS เท่ากัน
+                    if (this.UseNativeSign)
+                    {
+                        string PinForSign = IsTestSign ? null : (token != null ? token.Password : null);
+                        using (NativeX509Signature externalSignature = new NativeX509Signature(cert, "SHA-1", PinForSign))
+                        {
+                            MakeSignature.SignDetached(appearance, externalSignature, chain, null, null, null, 0, CryptoStandard.CMS);
+                        }
+                    }
+                    else
+                    {
+                        IExternalSignature externalSignature = new X509Certificate2Signature(cert, "SHA-1");
+                        MakeSignature.SignDetached(appearance, externalSignature, chain, null, null, null, 0, CryptoStandard.CMS);
+                    }
+
+
                 }
             }
             catch (Exception ex)
@@ -409,6 +451,81 @@ namespace EtaxSignUtil
         //    }
         //    return TransErr;
         //}
+        // === Native path — ใช้เมื่อ config UseEtaxNativeSign = Y ===
+        // อ่าน provider info จาก metadata ของ cert โดยตรง (CertGetCertificateContextProperty)
+        // — ไม่เรียก cert.PrivateKey เลย → ข้าม .NET runtime ที่ถูก tighten ใน cumulative update ล่าสุด
+        // — ไม่ acquire key handle ตอน enumerate → ไม่เด้ง SafeNet UI ถาม PIN บน cert ที่ไม่เกี่ยว
+        // — เซ็นจริงจะ acquire handle ใน NativeX509Signature ตอน sign เท่านั้น
+        private int GetCertNative(TokenInfo token, ref X509Certificate2 cert, ref string ErrMsg)
+        {
+            int TransErr = 0;
+
+            string ProviderName = token.NET_ProviderName;
+            string ProviderName2 = token.NET_ProviderName2;
+
+            X509Store storeCert = new X509Store(StoreLocation.CurrentUser);
+            storeCert.Open(OpenFlags.ReadOnly);
+            try
+            {
+                string lastRejectReason = null;
+                foreach (X509Certificate2 cert2 in storeCert.Certificates)
+                {
+                    if (!cert2.HasPrivateKey) continue;
+
+                    string providerName;
+                    string containerName;
+                    uint keySpec;
+                    if (!NativeCrypto.GetCertKeyProvInfo(cert2.Handle, out providerName, out containerName, out keySpec))
+                        continue;
+
+                    if (IsHardwareTokenProvider(providerName, ProviderName, ProviderName2))
+                    {
+                        cert = cert2;
+                        if (!string.IsNullOrEmpty(containerName)
+                            && EtaxSignUtil.Value.Variable.KeyContainerName != containerName)
+                        {
+                            EtaxSignUtil.Value.Variable.KeyContainerName = containerName;
+                        }
+                        ErrMsg = "พบ Certificate ที่ใช้งานได้ - ProviderName: " + providerName;
+                        return TransErr;
+                    }
+
+                    if (!string.IsNullOrEmpty(providerName))
+                    {
+                        lastRejectReason = "พบ Certificate ที่ไม่ตรงกับ ProviderName ที่ตั้งไว้" + Environment.NewLine +
+                                           "Provider จริงคือ: " + providerName + Environment.NewLine +
+                                           "กรุณาตรวจสอบค่าที่ตั้งในระบบให้ตรงกับนี้";
+                    }
+                }
+
+                if (cert == null)
+                {
+                    ErrMsg = lastRejectReason ??
+                             ("ไม่พบ Certificate ที่ใช้งานได้ในเครื่อง" + Environment.NewLine +
+                              "กรุณาตรวจสอบว่า Token ได้ถูกเสียบ และมีใบรับรองอยู่ใน Certificate Store");
+                    return ++TransErr;
+                }
+            }
+            finally
+            {
+                storeCert.Close();
+            }
+
+            return TransErr;
+        }
+
+        // ใช้คู่กับ GetCertNative — match provider name ของ cert กับ Token ทั้ง CSP และ CNG
+        private static bool IsHardwareTokenProvider(string name, string cspExpected1, string cspExpected2)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            if (name == cspExpected1) return true;
+            if (name == cspExpected2) return true;
+            if (name.IndexOf("Smart Card Key Storage Provider", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("SafeNet", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("eToken", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
         private int GetCertTest(ref X509Certificate2 cert, ref string ErrMsg)
         {
             int TransErr = 0;
