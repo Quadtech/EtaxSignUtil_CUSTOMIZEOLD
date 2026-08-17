@@ -623,7 +623,9 @@ ORDER BY S.VLine";
             #region BuyerTradeParty
             #region DefinedTradeContact
             string DefinedTradeContact = "";
-            if (BuyerInformation.BUYER_URIID != "")
+            // ตัดช่องว่างหัวท้ายก่อนเช็ค กันอีเมลลูกค้าที่มีแต่ช่องว่างทำให้ tag URIID ว่าง (schema กรมสรรพากรบังคับอย่างน้อย 1 ตัวอักษร)
+            string BuyerURIID = (BuyerInformation.BUYER_URIID ?? "").Trim();
+            if (BuyerURIID != "")
             {
                 DefinedTradeContact =
 @"{0}{0}{0}{0}<ram:DefinedTradeContact>
@@ -633,7 +635,7 @@ ORDER BY S.VLine";
 {0}{0}{0}{0}</ram:DefinedTradeContact>";
                 DefinedTradeContact = String.Format(DefinedTradeContact
                     , "\t"
-                    , BuyerInformation.BUYER_URIID);
+                    , BuyerURIID);
             }
             #endregion
 

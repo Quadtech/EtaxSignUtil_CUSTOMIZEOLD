@@ -374,12 +374,14 @@ $@"{tab}{tab}{tab}<ram:SellerTradeParty>
             #region BuyerTradeParty
             #region DefinedTradeContact
             string DefinedTradeContact = "";
-            if (BuyerInformation.BUYER_URIID != "")
+            // ตัดช่องว่างหัวท้ายก่อนเช็ค กันอีเมลลูกค้าที่มีแต่ช่องว่างทำให้ tag URIID ว่าง (schema กรมสรรพากรบังคับอย่างน้อย 1 ตัวอักษร)
+            string BuyerURIID = (BuyerInformation.BUYER_URIID ?? "").Trim();
+            if (BuyerURIID != "")
             {
                 DefinedTradeContact =
 $@"{tab}{tab}{tab}{tab}<ram:DefinedTradeContact>
 {tab}{tab}{tab}{tab}{tab}<ram:EmailURIUniversalCommunication>
-{tab}{tab}{tab}{tab}{tab}{tab}<ram:URIID>{BuyerInformation.BUYER_URIID}</ram:URIID>
+{tab}{tab}{tab}{tab}{tab}{tab}<ram:URIID>{BuyerURIID}</ram:URIID>
 {tab}{tab}{tab}{tab}{tab}</ram:EmailURIUniversalCommunication>
 {tab}{tab}{tab}{tab}</ram:DefinedTradeContact>";
             }

@@ -381,9 +381,11 @@ ORDER BY VLine";
             BuyerTradePartyObj.SpecifiedTaxRegistration.ID.schemeID = this.BuyerInformation.BUYER_TAX_ID_TYPE;
             BuyerTradePartyObj.SpecifiedTaxRegistration.ID.value = this.BuyerInformation.BUYER_TAX_ID + this.BuyerInformation.BUYER_BRANCH_ID;
             #region DefinedTradeContact
-            if (!String.IsNullOrEmpty(BuyerInformation.BUYER_URIID))
+            // ตัดช่องว่างหัวท้ายก่อนเช็ค กันอีเมลลูกค้าที่มีแต่ช่องว่างทำให้ tag URIID ว่าง (schema กรมสรรพากรบังคับอย่างน้อย 1 ตัวอักษร)
+            string BuyerURIID = (BuyerInformation.BUYER_URIID ?? "").Trim();
+            if (BuyerURIID != "")
             {
-                BuyerTradePartyObj.DefinedTradeContact.EmailURIUniversalCommunication.URIID = BuyerInformation.BUYER_URIID;
+                BuyerTradePartyObj.DefinedTradeContact.EmailURIUniversalCommunication.URIID = BuyerURIID;
             }
             #endregion
             #region Buyer_PostalTradeAddress
