@@ -149,6 +149,7 @@
     <Compile Include="SI\SILayout.cs" />
     <Compile Include="TokenInfo.cs" />
     <Compile Include="UtilityClass.cs" />
+    <Compile Include="JavaRuntimeLocator.cs" />
     <Compile Include="Utility\TaxFileLayout.cs" />
     <Compile Include="Utility\Validator.cs" />
     <Compile Include="Variable.cs" />

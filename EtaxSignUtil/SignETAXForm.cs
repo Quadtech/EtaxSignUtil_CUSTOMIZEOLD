@@ -298,6 +298,8 @@ StackTrace : {ex.StackTrace}";
                     }
                     MessageBox.Show(ErrMsg, ExcaptionError);
                 }
+                else if (ErrMsg.Contains("Java"))
+                    MyExceptionMessageBox.Show("Java XML signing failed", ErrMsg);
                 else
                     MyMessageBox.Show(ErrMsg);
             }
@@ -388,6 +390,7 @@ StackTrace : {ex.StackTrace}";
         private int SignXML(string filepath, ref string ErrMsg, ref Exception ErrException)
         {
             int TransErr = 0;
+            var javaErrors = new List<string>();
             string filetemp = $"{System.IO.Path.GetTempPath()}{Guid.NewGuid()}.xml";
             try
             {
@@ -398,51 +401,37 @@ StackTrace : {ex.StackTrace}";
                 {
                     File.WriteAllText(filetemp, input, Encoding.UTF8);
                     string jarFile = Path.Combine(System.IO.Path.GetDirectoryName(Application.ExecutablePath), this.Token.Java_FileName);
-                    string jreFile = "\"java\"";
-                    if (TransErr == 0)
+                    string jreFile = "";
+                    List<string> javaPaths = JavaRuntimeLocator.GetExecutablePaths();
+                    TransErr = 1;
+                    foreach (string javaPath in javaPaths)
                     {
+                        jreFile = javaPath;
+                        ErrMsg = "";
                         TransErr = this.GetOutputJava(jreFile, jarFile, filetemp, filepath, ref ErrMsg);
-                        if (TransErr != 0 && (ErrMsg == "" || ErrMsg.Contains("The system cannot find the file specified")))
-                        {
-                            string FolderPath = @"C:\Program Files (x86)\Java";
-                            if (Directory.Exists(FolderPath))
-                            {
-                                string[] subdirs = Directory.GetDirectories(FolderPath);
-                                foreach (string javaPath in subdirs)
-                                {
-                                    ErrMsg = "";
-                                    jreFile = @"{0}\bin\java.exe";
-                                    jreFile = String.Format(jreFile, javaPath);
-                                    TransErr = this.GetOutputJava(jreFile, jarFile, filetemp, filepath, ref ErrMsg);
-                                    if (TransErr == 0)
-                                        break;
-                                }
-                            }
-                        }
-                        if (TransErr != 0 && (ErrMsg == "" || ErrMsg.Contains("The system cannot find the file specified")))
-                        {
-                            string FolderPath = @"C:\Program Files\Java";
-                            if (Directory.Exists(FolderPath))
-                            {
-                                string[] subdirs = Directory.GetDirectories(FolderPath);
-                                foreach (string javaPath in subdirs)
-                                {
-                                    ErrMsg = "";
-                                    jreFile = @"{0}\bin\java.exe";
-                                    jreFile = String.Format(jreFile, javaPath);
-                                    TransErr = this.GetOutputJava(jreFile, jarFile, filetemp, filepath, ref ErrMsg);
-                                    if (TransErr == 0)
-                                        break;
-                                }
-                            }
-                        }
+                        if (TransErr == 0)
+                            break;
+                        javaErrors.Add("Java: " + jreFile + Environment.NewLine
+                            + (String.IsNullOrEmpty(ErrMsg) ? "No standard output from Java." : ErrMsg));
+                        // Do not switch runtimes for a reported XML/Token signing error.
+                        if (!String.IsNullOrEmpty(ErrMsg)
+                            && !ErrMsg.Contains("The system cannot find the file specified"))
+                            break;
                     }
-                    if (TransErr != 0)
+                    if (javaPaths.Count == 0)
+                    {
+                        ErrMsg = "Java executable not found in QERP's PATH, JAVA_HOME or standard Java folders.";
+                    }
+                    else if (TransErr != 0)
                     {
                         TransErr = ResourceLoader.CreatedEmbeddedResourceToTempPath(this.Token.Java_FileName, ref jarFile);
                         if (TransErr == 0)
                         {
+                            ErrMsg = "";
                             TransErr = this.GetOutputJava(jreFile, jarFile, filetemp, filepath, ref ErrMsg);
+                            if (TransErr != 0)
+                                javaErrors.Add("Embedded JAR retry: " + jreFile + Environment.NewLine
+                                    + (String.IsNullOrEmpty(ErrMsg) ? "No standard output from Java." : ErrMsg));
                         }
                     }
                     if (TransErr != 0)
@@ -472,6 +461,13 @@ Description : {ex.Message}";
                 else
                     ErrMsg = ex.Message;
             }
+            if (TransErr != 0 && javaErrors.Count > 0)
+            {
+                ErrMsg += Environment.NewLine + Environment.NewLine + "--- Java attempts (first to last) ---"
+                    + Environment.NewLine + String.Join(Environment.NewLine + Environment.NewLine, javaErrors.ToArray());
+                if (!String.IsNullOrEmpty(Token.Password))
+                    ErrMsg = ErrMsg.Replace(Token.Password, "[REDACTED]");
+            }
             if (File.Exists(filetemp))
                 File.Delete(filetemp);
             
@@ -480,6 +476,8 @@ Description : {ex.Message}";
         private int GetOutputJava(string jreFile, string jarFile, string filetemp, string filepath, ref string ErrMsg)
         {
             int TransErr = 0;
+            string stage = "Prepare Java process";
+            int? exitCode = null;
             try
             {
                 string strArguments = $@" -jar ""{jarFile}"" {Token.Type} {Token.Java_ProviderName} {Token.Password} {Token.LibPath} {filetemp.Replace(" ", "[]")} {filepath.Replace(" ", "[]")}";
@@ -491,10 +489,14 @@ Description : {ex.Message}";
                 processJar.StartInfo.Arguments = strArguments;
                 processJar.StartInfo.UseShellExecute = false;
                 processJar.StartInfo.RedirectStandardOutput = true;
+                stage = "Start Java process";
                 processJar.Start();
+                stage = "Read Java output";
                 string result = processJar.StandardOutput.ReadToEnd();
                 processJar.WaitForExit();
+                exitCode = processJar.ExitCode;
 
+                stage = "Parse Java output";
                 string[] ListResult = result.Split(new string[] { "|", "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
                 if (ListResult.Length == 2)
                 {
@@ -524,6 +526,36 @@ Description : {ex.Message}";
 $@"Message : {ex.Message}
 Description : {ex.InnerException.Message}";
                 }
+                ErrMsg += Environment.NewLine + "Exception type: " + ex.GetType().FullName;
+                Win32Exception win32Exception = ex as Win32Exception;
+                if (win32Exception != null)
+                    ErrMsg += Environment.NewLine + "Windows error code: " + win32Exception.NativeErrorCode;
+            }
+            // Keep empty output unchanged because SignXML uses it to try other Java locations.
+            if (TransErr != 0 && !String.IsNullOrEmpty(ErrMsg))
+            {
+                string javaPath = jreFile.Trim('"');
+                string javaFileStatus = Path.IsPathRooted(javaPath)
+                    ? File.Exists(javaPath).ToString()
+                    : "Windows/PATH lookup (not an absolute path)";
+                ErrMsg += $@"
+
+--- Java diagnostics ---
+Stage: {stage}
+Java executable: {jreFile}
+Java file exists: {javaFileStatus}
+JAR file: {jarFile}
+JAR exists: {File.Exists(jarFile)}
+Input XML exists: {File.Exists(filetemp)}
+Token DLL: {Token.LibPath}
+Token DLL exists: {File.Exists(Token.LibPath)}
+Application: {Application.ExecutablePath}
+Working directory: {Environment.CurrentDirectory}
+QERP process: {IntPtr.Size * 8}-bit
+Java exit code: {(exitCode.HasValue ? exitCode.Value.ToString() : "Process did not complete")}";
+                // Never include the command arguments: they contain the Token password.
+                if (!String.IsNullOrEmpty(Token.Password))
+                    ErrMsg = ErrMsg.Replace(Token.Password, "[REDACTED]");
             }
             return TransErr;
         }
