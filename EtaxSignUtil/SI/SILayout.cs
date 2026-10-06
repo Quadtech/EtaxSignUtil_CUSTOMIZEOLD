@@ -560,9 +560,10 @@ $@"{tab}<rsm:ExchangedDocument>
 {0}{0}{0}{0}{0}{0}<ram:URIID>{1}</ram:URIID>
 {0}{0}{0}{0}{0}</ram:EmailURIUniversalCommunication>
 {0}{0}{0}{0}</ram:DefinedTradeContact>";
+                // escape อักขระสงวน XML (เช่น &) ตอนประกอบ XML เท่านั้น ค่าใน property ยังเป็นข้อความดิบไว้ใช้ทำ CSV
                 DefinedTradeContact = String.Format(DefinedTradeContact
                     , "\t"
-                    , BuyerURIID);
+                    , BuyerInformation.GetStringXML(BuyerURIID, false));
             }
             #endregion
 

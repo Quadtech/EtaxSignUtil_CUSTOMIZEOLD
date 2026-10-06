@@ -378,10 +378,11 @@ $@"{tab}{tab}{tab}<ram:SellerTradeParty>
             string BuyerURIID = (BuyerInformation.BUYER_URIID ?? "").Trim();
             if (BuyerURIID != "")
             {
+                // escape อักขระสงวน XML (เช่น &) ตอนประกอบ XML เท่านั้น ค่าใน property ยังเป็นข้อความดิบไว้ใช้ทำ CSV
                 DefinedTradeContact =
 $@"{tab}{tab}{tab}{tab}<ram:DefinedTradeContact>
 {tab}{tab}{tab}{tab}{tab}<ram:EmailURIUniversalCommunication>
-{tab}{tab}{tab}{tab}{tab}{tab}<ram:URIID>{BuyerURIID}</ram:URIID>
+{tab}{tab}{tab}{tab}{tab}{tab}<ram:URIID>{BuyerInformation.GetStringXML(BuyerURIID, false)}</ram:URIID>
 {tab}{tab}{tab}{tab}{tab}</ram:EmailURIUniversalCommunication>
 {tab}{tab}{tab}{tab}</ram:DefinedTradeContact>";
             }

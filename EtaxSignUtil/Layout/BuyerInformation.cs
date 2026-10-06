@@ -347,6 +347,10 @@ namespace EtaxSignUtil.Layout
             this.BUYER_COUNTRY_ID = GetStringXML(BUYER_COUNTRY_ID, false);
         }
 
+        /// <summary>
+        /// ตรวจข้อมูลผู้ซื้อก่อนสร้างไฟล์ e-tax (เลขผู้เสียภาษี/สาขา/รหัสไปรษณีย์/ที่อยู่/อีเมล)
+        /// ไม่ผ่านคืนค่ามากกว่า 0 พร้อมข้อความใน ErrMsg
+        /// </summary>
         public int ValidateInfo(ref string ErrMsg)
         {
             int TransErr = 0;
@@ -393,6 +397,14 @@ namespace EtaxSignUtil.Layout
                     ErrMsg = "กรุณาระบุ รหัสตำบล/แขวงที่โปรแกรมข้อมูลลูกค้า";
                     return ++TransErr;
                 }
+            }
+            // อีเมลที่มี < > (เช่น 'ชื่อ' <a@b.com>) ไม่ใช่อีเมลที่ถูกต้อง และทำให้ไฟล์ XML พัง sign ไม่ผ่าน ต้องแก้ที่ข้อมูลลูกค้า
+            string BuyerURIID = (this.BUYER_URIID ?? "").Trim();
+            if (BuyerURIID.IndexOfAny(new char[] { '<', '>' }) >= 0)
+            {
+                ErrMsg = $@"อีเมลลูกค้าไม่ถูกต้อง : {BuyerURIID}
+กรุณาแก้ที่โปรแกรมข้อมูลลูกค้า ให้เหลือแค่อีเมล ห้ามมีเครื่องหมาย < >";
+                return ++TransErr;
             }
             return TransErr;
         }
